@@ -16,7 +16,9 @@ import java.util.List;
 public interface OrderDao extends JpaRepository<Order,String> {
     List<Order> findAllByStateAndUserId(Integer userId,Integer state);
     List<Order> findAllByStateAndSellerId(Integer sellerId,Integer state);
-    List<Order> findAllByUserId(Integer userId);
+    Page<Order> findAllByUserIdAndUserDeleteState(Integer userId,Pageable pageable,Boolean userDeleteState);
+    Page<Order> findAllBySellerId(Integer sellerId,Pageable pageable);
+    List<Order> findAllByUserIdAndUserDeleteState(Integer userId,Boolean userDeleteState);
     List<Order> findAllBySellerId(Integer sellerId);
     Order findByOrderId(String orderid);
     Page<Order> findAll(Specification specification, Pageable pageable);

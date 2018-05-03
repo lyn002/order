@@ -2,14 +2,12 @@ package com.lyn.demo.service;
 
 import com.lyn.demo.dao.OrderDao;
 import com.lyn.demo.dao.OrderDetailDao;
+import com.lyn.demo.dao.RefundDao;
 import com.lyn.demo.domain.Order;
 import com.lyn.demo.domain.OrderDetail;
-import com.lyn.demo.page.Pagination;
+import com.lyn.demo.domain.Refund;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.*;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
@@ -26,34 +24,43 @@ public class OrderService {
     @Autowired
     private OrderDetailDao orderDetailDao;
 
+    @Autowired
+    private RefundDao refundDao;
+
     //创建订单
-    public Order addOrder(Integer userid,Integer sellerId,List<Integer> commodityid,String adress,List<Integer> number,List<Double> price) {
+    public Order addOrder(Integer userId,Integer sellerId,String adress,
+                          List<Integer> commodityId,List<Integer> number,List<Double> price
+    ) {
         Double total = 0d;
         Order order1 = new Order();
+        UUID uuid = UUID.randomUUID();
+        order1.setOrderId(uuid.toString());
+        order1.setUserDeleteState(false);
         Date day = new Date();
-        order1.setUserId(userid);
+        order1.setUserId(userId);
         order1.setSellerId(sellerId);
         order1.setCreateTime(day);
         order1.setUpdateTime(day);
         order1.setState(1);
-        UUID uuid = UUID.randomUUID();
-        order1.setOrderId(uuid.toString());
-        for(int i = 0;i<number.size();i++){
+        order1.setAdress(adress);
+        String s = uuid.toString();
+       for(int i = 0;i<commodityId.size();i++){
             OrderDetail orderDetail = new OrderDetail();
-            orderDetail.setOrderId(uuid.toString());
-            orderDetail.setCommodityId(commodityid.get(i));
+            orderDetail.setOrderId(s);
+            orderDetail.setCommodityId(commodityId.get(i));
             orderDetail.setNumber(number.get(i));
             orderDetail.setPrice(price.get(i));
-            total +=number.get(i)*price.get(i);
+            orderDetailDao.save(orderDetail);
+            total += number.get(i)*price.get(i);
         }
         order1.setPayPrice(total);
         return orderDao.save(order1);
-    }
+}
 
     //删除订单
-    public void deleteOrder(String orderid) throws Exception {
-        List<OrderDetail> orderDetail = orderDetailDao.findAllByOrderId(orderid);
-        Order order = orderDao.getOne(orderid);
+    public void deleteOrder(String orderId) throws Exception {
+        List<OrderDetail> orderDetail = orderDetailDao.findAllByOrderId(orderId);
+        Order order = orderDao.getOne(orderId);
         if (orderDetail == null){
             throw new Exception("删除订单，未找到订单详情。");
         }
@@ -63,12 +70,31 @@ public class OrderService {
             for (int i = 0;i<orderDetail.size();i++) {
                 orderDetailDao.delete(orderDetail.get(i));
             }
-            orderDao.delete(orderid);
+            orderDao.delete(orderId);
+        }
+    }
+
+    //买家删除订单显示
+    public void deleteUserOrder(String orderId) throws Exception{
+        Order order = orderDao.getOne(orderId);
+        if (order== null){
+            throw new Exception("删除订单，未找到订单。");
+        }
+        else{
+            order.setUserDeleteState(true);
+            orderDao.save(order);
         }
     }
 
     //买家分页查询订单
-    public Pagination<Order> userQueryOrder(Integer userId,Integer pageNo,Integer pageSize){
+    public Page<Order> userQueryOrder(Integer userId, Integer pageNumber, Integer pageSize){
+        pageNumber = (pageNumber == null ? 1 : pageNumber-1);
+        pageSize = (pageSize == null ? 1 : pageSize);
+        Pageable pageable = new PageRequest(pageNumber,pageSize, Sort.Direction.DESC,"createTime");
+        Page<Order> orderList = orderDao.findAllByUserIdAndUserDeleteState(userId,pageable,false);
+        return orderList;
+    }
+    /*public Pagination<Order> userQueryOrder(Integer userId,Integer pageNo,Integer pageSize,Boolean userDeleteState){
         Specification<Order> specification = new Specification<Order>() {
             @Override
             public Predicate toPredicate(Root<Order> root,
@@ -84,10 +110,17 @@ public class OrderService {
         Page page1 = orderDao.findAll(specification, pageable);
         Pagination<Order> pagination = new Pagination(pageNo,pageSize,page1.getSize(),page1.getContent());
         return pagination;
-    }
+    }*/
 
     //商家分页查询订单
-    public Pagination<Order> sellerQueryOrder(Integer sellerId,Integer pageNo,Integer pageSize){
+    public Page<Order> sellerQueryOrder(Integer sellerId, Integer pageNumber, Integer pageSize){
+        pageNumber = (pageNumber == null ? 1 : pageNumber-1);
+        pageSize = (pageSize == null ? 1 : pageSize);
+        Pageable pageable = new PageRequest(pageNumber,pageSize, Sort.Direction.DESC,"createTime");
+        Page<Order> orderList = orderDao.findAllBySellerId(sellerId,pageable);
+        return orderList;
+    }
+    /*public Pagination<Order> sellerQueryOrder(Integer sellerId,Integer pageNo,Integer pageSize){
         Specification<Order> specification = new Specification<Order>() {
             @Override
             public Predicate toPredicate(Root<Order> root,
@@ -103,7 +136,7 @@ public class OrderService {
         Page page1 = orderDao.findAll(specification, pageable);
         Pagination<Order> pagination = new Pagination(pageNo,pageSize,page1.getSize(),page1.getContent());
         return pagination;
-    }
+    }*/
 
     //查找所有订单
     public List<Order> orderList() {
@@ -117,12 +150,12 @@ public class OrderService {
 
     //根据用户ID查询订单
     public List<Order> findByUserId(Integer userId){
-        return orderDao.findAllByUserId(userId);
+        return orderDao.findAllByUserIdAndUserDeleteState(userId,false);
     }
 
     //根据商家ID查询订单
     public List<Order> findBySellerId(Integer sellerId){
-        return orderDao.findAllByUserId(sellerId);
+        return orderDao.findAllBySellerId(sellerId);
     }
 
     //根据用户ID和订单状态查询订单
@@ -136,7 +169,7 @@ public class OrderService {
     }
 
     //修改订单付款状态和付款时间
-    public Order updateOder(String orderId) {
+    public Order orderPay(String orderId) {
         Order order1 = orderDao.findOne(orderId);
         if (order1 == null)
             return null;
@@ -150,7 +183,7 @@ public class OrderService {
     }
 
     //发货：填写快递公司、物流单号、修改发货状态和发货时间
-    public Order updateDeliver(String orderId,String deliverFirm, String delivernumber) {
+    public Order updateDeliver(String orderId,String deliverFirm, String deliverNumber) {
         Order order1 = orderDao.findOne(orderId);
         if (order1 == null)
             return null;
@@ -159,7 +192,7 @@ public class OrderService {
             order1.setDeliverTime(day);
             order1.setUpdateTime(day);
             order1.setDeliverFirm(deliverFirm);
-            order1.setDeliverNumber(delivernumber);
+            order1.setDeliverNumber(deliverNumber);
             order1.setState(3);
             return orderDao.save(order1);
         }
@@ -191,4 +224,55 @@ public class OrderService {
         }
         return orderDao.save(order);
     }
+
+    //添加订单详情
+    public  OrderDetail addorderdetail(Integer id,Integer number,String orderId,Integer commodityId,Double price){
+        OrderDetail orderDetail = new OrderDetail();
+        orderDetail.setId(id);
+        orderDetail.setNumber(number);
+        orderDetail.setOrderId(orderId);
+        orderDetail.setPrice(price);
+        orderDetail.setCommodityId(commodityId);
+        return orderDetailDao.save(orderDetail);
+    }
+
+    //退货申请创建
+    public Refund addReund(Order order,String adress){
+        Refund refund = new Refund();
+        refund.setAdress(adress);
+        refund.setOrderId(order.getOrderId());
+        refund.setPayPrice(order.getPayPrice());
+        refund.setUserId(order.getUserId());
+        refund.setSellerId(order.getSellerId());
+        refund.setState(1);
+        return refundDao.save(refund);
+    }
+
+    //退货填写或修改物流单号
+    public Refund updateDeliverNumber(String orderId,String deliverFirm,String deliverNumber){
+        Refund refund =  refundDao.findOne(orderId);
+        refund.setDeliverFirm(deliverFirm);
+        refund.setDeliverNumber(deliverNumber);
+        refund.setState(2);
+        return refundDao.save(refund);
+    }
+
+    public Refund refundCofirmReceipt(String orderId){
+        Refund refund =  refundDao.findOne(orderId);
+        refund.setState(3);
+        return refundDao.save(refund);
+    }
+
+    //完成退款
+    public Refund refundsuccess(String orderId){
+        Refund refund =  refundDao.findOne(orderId);
+        refund.setState(4);
+        return refundDao.save(refund);
+    }
+
+    //商家删除退款订单
+    public void deleteRefund(String orderId){
+        refundDao.delete(orderId);
+    }
+
 }

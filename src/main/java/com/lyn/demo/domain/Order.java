@@ -18,8 +18,9 @@ public class Order implements Serializable {
     @Id
     @GeneratedValue(generator = "orderId")
     @GenericGenerator(name = "orderId",strategy = "assigned")
-    private String orderId;//订单号
+    private String orderId;//订单ID
     private Integer userId;//用户ID
+    private Boolean userDeleteState;//买家删除订单显示  false：未删除   true：已经删除
     private Integer sellerId;//商家ID
     private Date createTime;//订单创建时间
     private Double payPrice;//付款金额

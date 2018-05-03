@@ -1,7 +1,7 @@
 package com.lyn.demo.enums;
 
 public enum ResultEnum {
-    SUCESS(0,"成功"),
+    SUCCESS(0,"成功"),
     FAIL(1,"失败");
 
     private Integer code;
